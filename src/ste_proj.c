@@ -9,11 +9,14 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <time.h>
+#include <sys/mman.h>
 #include "rdm.h"
 #include "ste_reg.h"
 #include "ste_proj_gpio.h"
 
 #define GPIO_DEV                            "/dev/gpio"
+#define MAP_SIZE                            4
 #define SYSCTL_GPIO1_MODE   0x10000060
 
 ///////////////////////////////
@@ -313,6 +316,8 @@ int gpio_init_dev()
 
 }
 
+static int dev_fd;
+
 int main(int argc, char *argv[])
 {
 	int data;
@@ -321,17 +326,33 @@ int main(int argc, char *argv[])
 	int offset;
 	int pid;
 	int idx = 0;
-    int val = 0;
+    unsigned int val = 0;
 
     printf("[Proc]Init\n");
 	gpio_init_dev();
-
+    /*
     printf("[Proc]Reg init\n");
     val = ra_reg_read(SYSCTL_GPIO1_MODE);
     printf("[Proc]Reg Val Read=%08x\n",val);
     val = val & (~0xC0) | (0x40);
     printf("[Proc]Reg Val Write=%08x\n", val);
     ra_reg_write(SYSCTL_GPIO1_MODE,val);
+    */
+    dev_fd = open("/dev/mem", O_RDWR | O_NDELAY);
+    if (dev_fd < 0)
+    {
+        printf("open(/dev/mem) failed.");
+        return 0;
+    }
+    unsigned char *map_base = (unsigned char *)mmap(NULL, 0xFF, PROT_READ | PROT_WRITE, MAP_SHARED, dev_fd, 0x10000000);
+    val = *(volatile unsigned int *)(map_base+0x60);
+    printf("[Proc]Reg Val Read=%08x\n", val);
+    val = val & (~0xC0) | (0x40);
+    printf("[Proc]Reg Val Write=%08x\n", val);
+    *(volatile unsigned int *)(map_base+0x60) = val;
+    if (dev_fd)
+        close(dev_fd);
+    munmap(map_base, MAP_SIZE);
     /////////////////////
     printf("[Proc]Init dev\n");
     if(gpio >=0 && gpio <= 31) 
